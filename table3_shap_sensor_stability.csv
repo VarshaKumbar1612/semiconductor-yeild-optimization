@@ -1,0 +1,31 @@
+Associated Sensor / Feature,Top-10 Stability (10 Splits),Mean |SHAP| Impact,Time Correlation |r|,Diagnostic Classification
+33,9/10 (90%),0.01704,0.0793,Stationary Process Sensor
+130,9/10 (90%),0.01594,0.1516,Regime-Shift Sensitive Sensor (|r_time| > 0.15)
+103,8/10 (80%),0.02199,0.3093,Regime-Shift Sensitive Sensor (|r_time| > 0.15)
+21,7/10 (70%),0.01451,0.0551,Stationary Process Sensor
+205,7/10 (70%),0.01439,0.0455,Stationary Process Sensor
+510,7/10 (70%),0.01409,0.1646,Regime-Shift Sensitive Sensor (|r_time| > 0.15)
+129,5/10 (50%),0.01324,0.4716,Regime-Shift Sensitive Sensor (|r_time| > 0.15)
+316,4/10 (40%),0.01367,0.0989,Stationary Process Sensor
+64,4/10 (40%),0.01062,0.0152,Stationary Process Sensor
+163,3/10 (30%),0.01199,0.0449,Stationary Process Sensor
+183,3/10 (30%),0.01107,0.0249,Stationary Process Sensor
+460,2/10 (20%),0.0137,0.0081,Stationary Process Sensor
+0,2/10 (20%),0.01082,0.0433,Stationary Process Sensor
+102,2/10 (20%),0.01036,0.0788,Stationary Process Sensor
+31,2/10 (20%),0.01019,0.1442,Stationary Process Sensor
+203,2/10 (20%),0.01015,0.0337,Stationary Process Sensor
+488,2/10 (20%),0.00977,0.002,Stationary Process Sensor
+59,10/10 (100%),0.04058,0.1845,Regime-Shift Sensitive Sensor (|r_time| > 0.15)
+200,1/10 (10%),0.01281,0.0044,Stationary Process Sensor
+188,1/10 (10%),0.01263,0.0104,Stationary Process Sensor
+210,1/10 (10%),0.01005,0.0622,Stationary Process Sensor
+81,1/10 (10%),0.00881,0.1026,Stationary Process Sensor
+146,1/10 (10%),0.00867,0.0958,Stationary Process Sensor
+480,1/10 (10%),0.00863,0.1504,Regime-Shift Sensitive Sensor (|r_time| > 0.15)
+195,1/10 (10%),0.00829,0.0812,Stationary Process Sensor
+58,1/10 (10%),0.00824,0.1162,Stationary Process Sensor
+180,1/10 (10%),0.00811,0.1235,Stationary Process Sensor
+90,1/10 (10%),0.00799,0.0259,Stationary Process Sensor
+56,1/10 (10%),0.00735,0.0007,Stationary Process Sensor
+137,1/10 (10%),0.0069,0.0676,Stationary Process Sensor

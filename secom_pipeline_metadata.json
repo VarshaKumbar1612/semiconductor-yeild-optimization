@@ -1,0 +1,26 @@
+{
+    "pipeline_version": "SECOM_Final_Publication_Pipeline",
+    "feature_engineering": "KNNImputer(k=5, distance) + RobustScaler + missing_sensor_count + Consensus-RFECV",
+    "protocol_A_benchmark": "10 Repeated Stratified 80/20 Splits (table1_protocol_a_summary.csv)",
+    "protocol_B_deployment": "3 Expanding-Window Chronological Splits (table2_protocol_b_summary.csv)",
+    "top_stable_associated_sensors": [
+        "33",
+        "130",
+        "103",
+        "21",
+        "205",
+        "510",
+        "129",
+        "316",
+        "64",
+        "163"
+    ],
+    "exported_files": [
+        "table1_protocol_a_summary.csv",
+        "table2_protocol_b_summary.csv",
+        "table3_shap_sensor_stability.csv",
+        "secom_final_wafer_risk_scores.csv",
+        "fig1_final_shap_global_summary.png",
+        "fig2_final_shap_local_waterfall.png"
+    ]
+}
