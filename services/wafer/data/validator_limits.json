@@ -1,0 +1,17 @@
+{
+  "min_height": 18,
+  "max_height": 212,
+  "min_width": 13,
+  "max_width": 204,
+  "min_die_size": 34,
+  "max_die_size": 22372,
+  "hard_min_side": 10,
+  "hard_max_side": 256,
+  "allowed_values": [
+    0,
+    1,
+    2
+  ],
+  "train_nonzero_corner_rate": 2.5e-05,
+  "n_train_wafers": 118735
+}

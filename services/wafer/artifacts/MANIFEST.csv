@@ -1,0 +1,8 @@
+file,md5,bytes
+data/demo_samples.npz,b1865dd7784b350c381b62b6b7ccc219,10635
+data/validator_limits.json,4aa9418815399afb0d7b1ba86fb33557,291
+wafer_b1/b1_lib.py,9c4e10fc3eda34bcb36c24040fc32b74,1033
+wafer_b1/b1_s0_last.weights.h5,213fa0ce3214f9be333a000b0bdd3ff0,28740232
+wafer_bar/bar_model.joblib,c0d5317d45f17763f2a26824b3f67d48,2546641
+wafer_spp/spp_lib.py,4830f2d6d12c588b6f369b04e9547760,2254
+wafer_spp/spp_s0_last.weights.h5,d038dade6437b14001b0c7a6ae6905eb,4003400

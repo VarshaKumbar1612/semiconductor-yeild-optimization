@@ -1,0 +1,62 @@
+models:
+  wafer_bar:
+    title: "Classical GBDT (137 Hand-Crafted Features)"
+    domain: "WM-811K Wafer Maps (Spatial)"
+    architecture: "HistGradientBoostingClassifier on 35 mask + 102 spatial/Radon/connected-component features"
+    evaluation_protocol: "Stratified 5-fold lot-disjoint split across labeled WM-811K wafers (headline macro-F1 across all 9 classes)"
+    metrics:
+      headline_macro_f1: 0.869
+      full_test_macro_f1: 0.896
+    strengths:
+      - "Highest overall macro-F1 and lowest false-alarm rate on normal ('none') wafers."
+      - "Fast CPU inference (<15 ms) and invariant to native wafer dimensions via normalized radial/angular bins."
+    limitations:
+      - "Relies solely on binary/ternary wafer maps; no fab equipment telemetry is used."
+      - "Cannot detect transposed matrices or swapped {0, 1, 2} encodings."
+      - "Literature cause lookup suggests hypotheses only and is not validated against fab root-cause logs."
+
+  wafer_b1:
+    title: "Resize CNN (B1, 64x64 Area-Resized)"
+    domain: "WM-811K Wafer Maps (Spatial)"
+    architecture: "3-stage Conv-BN-ReLU CNN trained on cv2.INTER_AREA 64x64 one-hot wafer maps"
+    evaluation_protocol: "Same lot-disjoint split as Classical GBDT; supports counterfactual Integrated Gradients (32 midpoint steps)"
+    metrics:
+      headline_macro_f1: 0.820
+    strengths:
+      - "Provides pixel-level Integrated Gradients saliency maps highlighting defect regions driving the prediction."
+    limitations:
+      - "Resizing anisotropic wafers to 64x64 distorts aspect ratios on elongated wafer maps."
+      - "Produces a higher false-alarm rate on normal ('none') wafers than the 137-feature classical model."
+
+  wafer_spp:
+    title: "Spatial Pyramid Pooling CNN (Native Size)"
+    domain: "WM-811K Wafer Maps (Spatial)"
+    architecture: "GroupNorm CNN with (1, 2, 4) Spatial Pyramid Pooling preserving native wafer height and width"
+    evaluation_protocol: "Same lot-disjoint split at native resolution without resizing"
+    metrics:
+      headline_macro_f1: 0.800
+    strengths:
+      - "Preserves exact native wafer geometry without spatial resampling."
+    limitations:
+      - "Scores ~0.020 macro-F1 below Resize CNN and ~0.069 below Classical GBDT."
+      - "Grad-CAM explanations are intentionally disabled after failing pixel-deletion faithfulness checks."
+
+  secom_ensemble:
+    title: "SECOM Balanced RF + SPE-DT Telemetry Risk Ranker"
+    domain: "UCI SECOM Process Telemetry (590 Sensors)"
+    architecture: "Equal-weight fusion (0.5 Balanced Random Forest + 0.5 Optuna-tuned Self-Paced Ensemble DT) with KNN(k=5), RobustScaler, missing_sensor_count, and Consensus-RFECV (63 selected features)"
+    evaluation_protocol: "Protocol A (10 repeated stratified 80/20 splits) & Protocol B (3 expanding-window chronological splits; deployed weights trained on Window 3 first 80%)"
+    metrics:
+      protocol_a_pr_auc: "0.241 ± 0.048"
+      protocol_a_roc_auc: "0.751 ± 0.036"
+      protocol_b_pr_auc: "0.184 ± 0.041"
+      protocol_b_roc_auc: "0.692 ± 0.049"
+      top10_inspection_cutoff: 0.4270
+      top20_inspection_cutoff: 0.3745
+    strengths:
+      - "Designed as an inspection-budget ranking tool for severe class imbalance (6.6% fail rate) with chronological drift evaluation."
+      - "Provides per-wafer TreeSHAP driver attributions alongside cross-split sensor stability rankings."
+    limitations:
+      - "Sensors are anonymized ('0'..'589'); SHAP attributions reflect statistical model association, not physical root cause."
+      - "Chronological performance drops relative to random splits due to fab process drift over time."
+      - "Unpaired with WM-811K wafer maps; never fused into a joint score."

@@ -1,0 +1,27 @@
+# Virtual environments
+.venv/
+.venv_secom/
+.venv_wm/
+venv/
+env/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Local IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Nested upstream clone & duplicate raw bundle (runtime copies live under services/)
+secom-audit/
+wm_bundle_raw/
+
+# Logs / temporary outputs
+*.log

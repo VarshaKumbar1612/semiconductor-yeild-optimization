@@ -1,0 +1,11 @@
+services:
+  wafer:
+    name: "WM-811K Spatial Wafer Service"
+    url: "http://127.0.0.1:8001"
+    timeout_sec: 15.0
+    enabled: true
+  secom:
+    name: "SECOM Telemetry Screening Service"
+    url: "http://127.0.0.1:8002"
+    timeout_sec: 10.0
+    enabled: true

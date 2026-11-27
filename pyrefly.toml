@@ -1,0 +1,3 @@
+preset = "basic"
+search-path = [".", "services/wafer/libs"]
+python-interpreter-path = ".venv_wm/Scripts/python.exe"
