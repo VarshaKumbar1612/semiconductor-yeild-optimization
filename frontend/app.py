@@ -18,7 +18,41 @@ SECOM_DEMO_PATH = ROOT_DIR / "services" / "secom" / "data" / "demo_rows.csv"
 SECOM_COLS_PATH = ROOT_DIR / "services" / "secom" / "data" / "feature_order.json"
 SECOM_DATA_DIR = ROOT_DIR / "services" / "secom" / "data"
 ASSETS_DIR = ROOT_DIR / "frontend" / "assets"
+import subprocess
+import sys
+import time
 
+
+@st.cache_resource
+def ensure_backends_running() -> bool:
+    """Start :8001, :8002, and :8000 automatically when hosted on a single-container cloud."""
+    try:
+        r = httpx.get(f"{GATEWAY_URL}/health", timeout=1.5)
+        if r.status_code == 200 and r.json().get("status") == "ok":
+            return True
+    except Exception:
+        pass
+
+    services = [
+        [sys.executable, "-m", "uvicorn", "services.wafer.main:app", "--host", "127.0.0.1", "--port", "8001"],
+        [sys.executable, "-m", "uvicorn", "services.secom.main:app", "--host", "127.0.0.1", "--port", "8002"],
+        [sys.executable, "-m", "uvicorn", "gateway.main:app", "--host", "127.0.0.1", "--port", "8000"],
+    ]
+    for cmd in services:
+        subprocess.Popen(cmd, cwd=str(ROOT_DIR))
+
+    for _ in range(25):
+        time.sleep(1.5)
+        try:
+            r = httpx.get(f"{GATEWAY_URL}/health", timeout=2.0)
+            if r.status_code == 200 and r.json().get("status") == "ok":
+                return True
+        except Exception:
+            pass
+    return False
+
+
+ensure_backends_running()
 st.set_page_config(
     page_title="Semiconductor Yield Diagnostics Platform",
     page_icon="🔬",
