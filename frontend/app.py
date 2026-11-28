@@ -1,5 +1,9 @@
 import io
 import json
+import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -9,25 +13,62 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from fastapi.testclient import TestClient
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-GATEWAY_URL = "http://127.0.0.1:8000"
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from gateway.main import app as gateway_app
 
 WAFER_DEMO_PATH = ROOT_DIR / "services" / "wafer" / "data" / "demo_samples.npz"
 SECOM_DEMO_PATH = ROOT_DIR / "services" / "secom" / "data" / "demo_rows.csv"
 SECOM_COLS_PATH = ROOT_DIR / "services" / "secom" / "data" / "feature_order.json"
 SECOM_DATA_DIR = ROOT_DIR / "services" / "secom" / "data"
 ASSETS_DIR = ROOT_DIR / "frontend" / "assets"
-import subprocess
-import sys
-import time
+
+
+def _port_ready(port: int) -> bool:
+    try:
+        r = httpx.get(f"http://127.0.0.1:{port}/health", timeout=1.5)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+@st.cache_resource
+def get_gateway_client() -> TestClient:
+    """Start :8001 and :8002 sequentially with 1-thread limits, then wrap Gateway in-process."""
+    low_cpu_env = os.environ.copy()
+    low_cpu_env.update({
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "TF_NUM_INTEROP_THREADS": "1",
+        "TF_NUM_INTRAOP_THREADS": "1",
+        "TF_CPP_MIN_LOG_LEVEL": "2",
+    })
+
+    services = [
+        (8001, [sys.executable, "-m", "uvicorn", "services.wafer.main:app", "--host", "127.0.0.1", "--port", "8001"]),
+        (8002, [sys.executable, "-m", "uvicorn", "services.secom.main:app", "--host", "127.0.0.1", "--port", "8002"]),
+    ]
+    for port, cmd in services:
+        if not _port_ready(port):
+            subprocess.Popen(cmd, cwd=str(ROOT_DIR), env=low_cpu_env)
+            for _ in range(45):
+                time.sleep(2.0)
+                if _port_ready(port):
+                    break
+
+    return TestClient(gateway_app)
 
 
 @st.cache_resource
 def ensure_backends_running() -> bool:
     """Start :8001, :8002, and :8000 automatically when hosted on a single-container cloud."""
     try:
-        r = httpx.get(f"{GATEWAY_URL}/health", timeout=1.5)
+        r = get_gateway_client().get("/health")
         if r.status_code == 200 and r.json().get("status") == "ok":
             return True
     except Exception:
@@ -44,7 +85,7 @@ def ensure_backends_running() -> bool:
     for _ in range(25):
         time.sleep(1.5)
         try:
-            r = httpx.get(f"{GATEWAY_URL}/health", timeout=2.0)
+            r = get_gateway_client().get("/health")
             if r.status_code == 200 and r.json().get("status") == "ok":
                 return True
         except Exception:
@@ -425,7 +466,7 @@ def load_secom_cols() -> List[str]:
 
 def fetch_health() -> Dict[str, Any]:
     try:
-        r = httpx.get(f"{GATEWAY_URL}/health", timeout=3.0)
+        r = get_gateway_client().get("/health")
         return r.json()
     except Exception as exc:
         return {"status": "offline", "error": str(exc), "services": {}}
@@ -662,7 +703,7 @@ with tab_diag:
 
             with st.spinner("Running parallel inference via Gateway (:8000)..."):
                 try:
-                    resp = httpx.post(f"{GATEWAY_URL}/analyze", json=payload, timeout=25.0)
+                    resp = get_gateway_client().post("/analyze", json=payload)
                     out = resp.json()
                 except Exception as exc:
                     st.error(f"Gateway request failed: {exc}. Ensure `run_all.ps1` is running.")
@@ -849,7 +890,7 @@ with tab_about:
     )
 
     try:
-        cards_resp = httpx.get(f"{GATEWAY_URL}/models", timeout=5.0).json()
+        cards_resp = get_gateway_client().get("/models").json()
         st.markdown(
             f'<div class="banner-info">ℹ️ {cards_resp.get("separation_policy", "")}</div>',
             unsafe_allow_html=True,
