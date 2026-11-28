@@ -1,12 +1,18 @@
 import io
 import json
 import os
-import subprocess
+import socket
 import sys
 import threading
-import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
+os.environ.setdefault("TF_NUM_INTRAOP_THREADS", "1")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import httpx
 import numpy as np
@@ -20,89 +26,96 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from gateway.main import app as gateway_app
-
 WAFER_DEMO_PATH = ROOT_DIR / "services" / "wafer" / "data" / "demo_samples.npz"
 SECOM_DEMO_PATH = ROOT_DIR / "services" / "secom" / "data" / "demo_rows.csv"
 SECOM_COLS_PATH = ROOT_DIR / "services" / "secom" / "data" / "feature_order.json"
 SECOM_DATA_DIR = ROOT_DIR / "services" / "secom" / "data"
 ASSETS_DIR = ROOT_DIR / "frontend" / "assets"
 
-
-def _port_ready(port: int) -> bool:
-    try:
-        r = httpx.get(f"http://127.0.0.1:{port}/health", timeout=1.5)
-        return r.status_code == 200
-    except Exception:
-        return False
-
-
-def _boot_microservices_bg() -> None:
-    low_cpu_env = os.environ.copy()
-    low_cpu_env.update({
-        "OMP_NUM_THREADS": "1",
-        "OPENBLAS_NUM_THREADS": "1",
-        "MKL_NUM_THREADS": "1",
-        "TF_NUM_INTEROP_THREADS": "1",
-        "TF_NUM_INTRAOP_THREADS": "1",
-        "TF_CPP_MIN_LOG_LEVEL": "2",
-    })
-
-    services = [
-        (8001, [sys.executable, "-m", "uvicorn", "services.wafer.main:app", "--host", "127.0.0.1", "--port", "8001"]),
-        (8002, [sys.executable, "-m", "uvicorn", "services.secom.main:app", "--host", "127.0.0.1", "--port", "8002"]),
-    ]
-    for port, cmd in services:
-        if not _port_ready(port):
-            subprocess.Popen(cmd, cwd=str(ROOT_DIR), env=low_cpu_env)
-            for _ in range(45):
-                time.sleep(2.0)
-                if _port_ready(port):
-                    break
-
-
-@st.cache_resource
-def get_gateway_client() -> TestClient:
-    """Launch :8001 and :8002 in a daemon thread so Streamlit renders immediately."""
-    threading.Thread(target=_boot_microservices_bg, daemon=True).start()
-    return TestClient(gateway_app)
-
-
-@st.cache_resource
-def ensure_backends_running() -> bool:
-    """Start :8001, :8002, and :8000 automatically when hosted on a single-container cloud."""
-    try:
-        r = get_gateway_client().get("/health")
-        if r.status_code == 200 and r.json().get("status") == "ok":
-            return True
-    except Exception:
-        pass
-
-    services = [
-        [sys.executable, "-m", "uvicorn", "services.wafer.main:app", "--host", "127.0.0.1", "--port", "8001"],
-        [sys.executable, "-m", "uvicorn", "services.secom.main:app", "--host", "127.0.0.1", "--port", "8002"],
-        [sys.executable, "-m", "uvicorn", "gateway.main:app", "--host", "127.0.0.1", "--port", "8000"],
-    ]
-    for cmd in services:
-        subprocess.Popen(cmd, cwd=str(ROOT_DIR))
-
-    for _ in range(25):
-        time.sleep(1.5)
-        try:
-            r = get_gateway_client().get("/health")
-            if r.status_code == 200 and r.json().get("status") == "ok":
-                return True
-        except Exception:
-            pass
-    return False
-
-
-ensure_backends_running()
 st.set_page_config(
     page_title="Semiconductor Yield Diagnostics Platform",
     page_icon="🔬",
     layout="wide",
 )
+
+# ==============================================================================
+# IN-PROCESS SERVICE ROUTER (Zero extra OS processes for Streamlit Cloud)
+# ==============================================================================
+_LOCAL_APPS: Dict[int, Any] = {}
+_WARMUP_LOCK = threading.Lock()
+_WARMUP_STARTED = False
+
+
+def _port_open(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.2)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _load_inprocess_services() -> None:
+    with _WARMUP_LOCK:
+        if 8001 not in _LOCAL_APPS and not _port_open(8001):
+            from services.wafer.main import app as wafer_app
+            _LOCAL_APPS[8001] = wafer_app
+        if 8002 not in _LOCAL_APPS and not _port_open(8002):
+            from services.secom.main import app as secom_app
+            _LOCAL_APPS[8002] = secom_app
+
+
+class _InProcessAsyncTransport(httpx.AsyncBaseTransport):
+    def __init__(self) -> None:
+        self._net = httpx.AsyncHTTPTransport()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        port = request.url.port
+        if request.url.host in ("127.0.0.1", "localhost") and port in (8001, 8002) and not _port_open(port):
+            if port not in _LOCAL_APPS:
+                return httpx.Response(503, json={"status": "starting"}, request=request)
+            asgi = httpx.ASGITransport(app=_LOCAL_APPS[port])
+            return await asgi.handle_async_request(request)
+        return await self._net.handle_async_request(request)
+
+
+class _InProcessSyncTransport(httpx.BaseTransport):
+    def __init__(self) -> None:
+        self._net = httpx.HTTPTransport()
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        port = request.url.port
+        if request.url.host in ("127.0.0.1", "localhost") and port in (8001, 8002) and not _port_open(port):
+            if port not in _LOCAL_APPS:
+                return httpx.Response(503, json={"status": "starting"}, request=request)
+            tc = TestClient(_LOCAL_APPS[port])
+            return tc.send(request)
+        return self._net.handle_request(request)
+
+
+_ORIG_ASYNC_INIT = httpx.AsyncClient.__init__
+_ORIG_SYNC_INIT = httpx.Client.__init__
+
+
+def _patched_async_init(self, *args, **kwargs):
+    kwargs.setdefault("transport", _InProcessAsyncTransport())
+    _ORIG_ASYNC_INIT(self, *args, **kwargs)
+
+
+def _patched_sync_init(self, *args, **kwargs):
+    kwargs.setdefault("transport", _InProcessSyncTransport())
+    _ORIG_SYNC_INIT(self, *args, **kwargs)
+
+
+httpx.AsyncClient.__init__ = _patched_async_init
+httpx.Client.__init__ = _patched_sync_init
+
+
+@st.cache_resource
+def get_gateway_client() -> TestClient:
+    global _WARMUP_STARTED
+    if not _WARMUP_STARTED:
+        _WARMUP_STARTED = True
+        threading.Thread(target=_load_inprocess_services, daemon=True).start()
+    from gateway.main import app as gateway_app
+    return TestClient(gateway_app)
 
 # ==============================================================================
 # CUSTOM THEME & DASHBOARD STYLING (Matches Lavender/Purple Design)
