@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -36,9 +37,7 @@ def _port_ready(port: int) -> bool:
         return False
 
 
-@st.cache_resource
-def get_gateway_client() -> TestClient:
-    """Start :8001 and :8002 sequentially with 1-thread limits, then wrap Gateway in-process."""
+def _boot_microservices_bg() -> None:
     low_cpu_env = os.environ.copy()
     low_cpu_env.update({
         "OMP_NUM_THREADS": "1",
@@ -61,6 +60,11 @@ def get_gateway_client() -> TestClient:
                 if _port_ready(port):
                     break
 
+
+@st.cache_resource
+def get_gateway_client() -> TestClient:
+    """Launch :8001 and :8002 in a daemon thread so Streamlit renders immediately."""
+    threading.Thread(target=_boot_microservices_bg, daemon=True).start()
     return TestClient(gateway_app)
 
 
